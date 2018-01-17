@@ -14,6 +14,8 @@ class Line(img_camera):
         # where should they update
         self.left_fitx = None
         self.right_fitx = None
+        self.left_lane_inds = None
+        self.right_lane_inds = None
 
         self.leftx_base = None
         self.rightx_base = None
@@ -27,6 +29,8 @@ class Line(img_camera):
         self.rightx = None
         self.righty = None
 
+
+
         # maybe need to correct
         self.ym_per_pix = 30/720 # meters per pixel in y dimension
         self.xm_per_pix = 3.7/700 # meters per pixel in x dimension
@@ -35,34 +39,16 @@ class Line(img_camera):
         self.right_curverad = None
         self.dist_from_center_in_meters = None
 
-        # was the line detected in the last iteration?
-        self.detected = False  
-        # x values of the last n fits of the line
-        self.recent_xfitted = [] 
-        #average x values of the fitted line over the last n iterations
-        self.bestx = None     
-        #polynomial coefficients averaged over the last n iterations
-        self.best_fit = None  
-        #polynomial coefficients for the most recent fit
-        self.current_fit = [np.array([False])]  
-        #radius of curvature of the line in some units
-        self.radius_of_curvature = None 
-        #distance in meters of vehicle center from the line
-        self.line_base_pos = None 
-        #difference in fit coefficients between last and new fits
-        self.diffs = np.array([0,0,0], dtype='float') 
-        #x values for detected line pixels
-        self.allx = None  
-        #y values for detected line pixels
-        self.ally = None
+        if self.left_fit is None and os.path.exists('line_fit.p'):
+            self.load_line_fit()
 
         # status process
         # auto update step by step
         # pipeline
-        if not self.result and auto:
+        if self.result is None and auto:
             self.update_M_and_Minv()
             self.transform_perspective()
-            self.find_lines(figname=True)
+            self.find_lines()
             self.curvature()
             self.distance_from_center()
             self.display()
@@ -93,25 +79,59 @@ class Line(img_camera):
         # need to be optimized
         binary_warped = self.binary_top_down_image
         self.update_base_points()
-        # Current positions to be updated for each window
-        leftx_current = self.leftx_base
-        rightx_current = self.rightx_base
-        # Choose the number of sliding windows
-        nwindows = 9
-        # Set height of windows
-        window_height = np.int(binary_warped.shape[0]/nwindows)
-        # Identify the x and y positions of all nonzero pixels in the image
+        
+        if os.path.exists('line_fit.p'):
+            left_fit, right_fit = self.update_line_fit()
+        else:    
+            left_fit, right_fit = self.generate_line_fit_with_windows()
+
+        self.generate_out_img(figname)
+
+        return left_fit, right_fit
+
+    def generate_out_img(self, figname):
+        binary_warped = self.binary_top_down_image
+        left_fit = self.left_fit
+        right_fit = self.right_fit
+        left_lane_inds = self.left_lane_inds
+        right_lane_inds = self.right_lane_inds
+        # Generate x and y values for plotting
+        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
         nonzero = binary_warped.nonzero()
         nonzeroy = np.array(nonzero[0])
         nonzerox = np.array(nonzero[1])
-
         out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0] # red
+        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255] # blue
+
+        if figname:
+            plt.imshow(out_img)
+            plt.plot(left_fitx, ploty, color='yellow')
+            plt.plot(right_fitx, ploty, color='yellow')
+            plt.xlim(0, out_img.shape[1])
+            plt.ylim(out_img.shape[0], 0)
         
-        # Set the width of the windows +/- margin
-        margin = 100
-        # Set minimum number of pixels found to recenter window
-        minpix = 50
+        self.out_img = out_img
+        self.ploty = ploty
+        self.left_fitx = left_fitx
+        self.right_fitx = right_fitx
+
+        return out_img
+
+    def generate_line_fit_with_windows(self, nwindows = 9, margin = 100, minpix = 50):
+            
+        binary_warped = self.binary_top_down_image
+        leftx_current = self.leftx_base
+        rightx_current = self.rightx_base
+
+        nonzero = binary_warped.nonzero()
+        nonzeroy = np.array(nonzero[0])
+        nonzerox = np.array(nonzero[1])
         # Create empty lists to receive left and right lane pixel indices
+        window_height = np.int(binary_warped.shape[0]/nwindows)
         left_lane_inds = []
         right_lane_inds = []
 
@@ -149,46 +169,22 @@ class Line(img_camera):
         rightx = nonzerox[right_lane_inds]
         righty = nonzeroy[right_lane_inds] 
 
-
         # Fit a second order polynomial to each
         left_fit = np.polyfit(lefty, leftx, 2)
         right_fit = np.polyfit(righty, rightx, 2)
 
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
-        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-        # self.left_fitx = left_fitx
-        # self.right_fitx = right_fitx
-        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0] # red
-        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255] # blue
-
-        if figname:
-            plt.imshow(out_img)
-            plt.plot(left_fitx, ploty, color='yellow')
-            plt.plot(right_fitx, ploty, color='yellow')
-            plt.xlim(0, 1280)
-            plt.ylim(720, 0)
-        
-        self.out_img = out_img
-        self.ploty = ploty
-        self.leftx = leftx
-        self.lefty = lefty
-        self.rightx = rightx
-        self.righty = righty
-        self.left_fitx = left_fitx
-        self.right_fitx = right_fitx
         self.left_fit = left_fit
         self.right_fit = right_fit
+        self.left_lane_inds = left_lane_inds
+        self.right_lane_inds = right_lane_inds
+        self.lefty = lefty
+        self.righty = righty
+        self.leftx = leftx
+        self.rightx = rightx
 
         return left_fit, right_fit
 
-
-
-
-    def find_lines_skip_slidewindows(self):
-        # not be used
-        # may be aborted
+    def update_line_fit(self):
         binary_warped = self.binary_top_down_image
         left_fit = self.left_fit
         right_fit = self.right_fit
@@ -211,46 +207,17 @@ class Line(img_camera):
         # Fit a second order polynomial to each
         left_fit = np.polyfit(lefty, leftx, 2)
         right_fit = np.polyfit(righty, rightx, 2)
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
-        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
-        def draw_window():
-            # Create an image to draw on and an image to show the selection window
-            out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
-            window_img = np.zeros_like(out_img)
-            # Color in left and right line pixels
-            out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-            out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+        self.left_fit = left_fit
+        self.right_fit = right_fit
+        self.left_lane_inds = left_lane_inds
+        self.right_lane_inds = right_lane_inds
+        self.lefty = lefty
+        self.righty = righty
+        self.leftx = leftx
+        self.rightx = rightx
 
-            # Generate a polygon to illustrate the search window area
-            # And recast the x and y points into usable format for cv2.fillPoly()
-            left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
-            left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, 
-                                          ploty])))])
-            left_line_pts = np.hstack((left_line_window1, left_line_window2))
-            right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
-            right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, 
-                                          ploty])))])
-            right_line_pts = np.hstack((right_line_window1, right_line_window2))
-
-            # Draw the lane onto the warped blank image
-            cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
-            cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
-            result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-            plt.imshow(result)
-            plt.plot(left_fitx, ploty, color='yellow')
-            plt.plot(right_fitx, ploty, color='yellow')
-            plt.xlim(0, 1280)
-            plt.ylim(720, 0)
-
-        draw_window()
-
-        self.left_fitx = left_fitx
-        self.right_fitx = right_fitx
-
-        return left_fitx, right_fitx
+        return left_fit, right_fit
 
     def curvature(self, meters=True):
         # default in meters or in pixel
@@ -328,10 +295,10 @@ class Line(img_camera):
         result = cv2.addWeighted(img, 1, newwarp, 0.3, 0)
         text_dist = 'Distance from lane center: {:.3f}m'.format(self.dist_from_center_in_meters)
         text_curvature = 'Radius of curvature: Left {:.3f}m, Right {:3f}m'.format(self.left_curverad, self.right_curverad)
-        text_lane_width = 'Width of lane line: {}m'.format(self.lane_line_width)
-        cv2.putText(result, text_lane_width, (30, 170), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
-        cv2.putText(result, text_dist, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
-        cv2.putText(result, text_curvature, (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
+        text_lane_width = 'Width of lane line: {:.3f}m'.format(self.lane_line_width)
+        cv2.putText(result, text_lane_width, (30, 170), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        cv2.putText(result, text_dist, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        cv2.putText(result, text_curvature, (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
         self.result = result
         # plt.imshow(result)
         return(result)
@@ -345,5 +312,15 @@ class Line(img_camera):
         im.save("unusual_images/unusual_{}.jpg".format(img_name))
         if not os.path.exists('unusual_lines'):
             os.mkdir('unusual_lines')
-        pickle.dump(self, open("unusual_images/line_{}.p".format(img_name), "wb" ) )       
+        pickle.dump(self, open("unusual_images/line_{}.p".format(img_name), "wb" ) )
+
+
+    def save_line_fit(self):
+        line_fit = {'left': self.left_fit, 'right': self.right_fit}
+        pickle.dump(line_fit, open('line_fit.p', 'wb'))
+
+    def load_line_fit(self):
+        line_fit = pickle.load(open('line_fit.p', 'rb'))
+        self.left_fit = line_fit['left']
+        self.right_fit = line_fit['right']
 

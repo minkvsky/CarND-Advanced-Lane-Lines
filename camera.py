@@ -68,6 +68,7 @@ class img_camera(camera):
 		self.M = None
 		self.Minv = None
 
+		self.undist = None
 		self.combined_threshold_img = None
 		self.binary_top_down_image = None
 	# need to modify
@@ -104,19 +105,21 @@ class img_camera(camera):
 
 	def transform_perspective(self):
 		img_size = self.img.shape[1], self.img.shape[0]
-		if not self.combined_threshold_img:	
+		if self.combined_threshold_img is None:	
 			self.combined_thresh()
 		warped = cv2.warpPerspective(self.combined_threshold_img, self.M, img_size, flags=cv2.INTER_LINEAR)
 		self.binary_top_down_image = warped
 		return warped
 
-	def undistort(self, test_img):
-		undist = cv2.undistort(test_img, self.mtx, self.dist, None, self.mtx)
+	def undistort(self):
+		undist = cv2.undistort(self.img, self.mtx, self.dist, None, self.mtx)
+		self.undist = undist
 		return undist
 
 
 	def combined_thresh(self):
-		img = self.img
+		self.undistort()
+		img = self.undist
 		# Choose a Sobel kernel size
 		ksize = 3
 		# Apply each of the thresholding functions

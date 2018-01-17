@@ -3,9 +3,6 @@ import cv2
 import glob
 import matplotlib.pyplot as plt
 
-def cal_undistort(img, mtx, dist):
-    undist = cv2.undistort(img, mtx, dist, None, mtx)
-    return(undist)
 
 def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     # Convert to grayscale
@@ -65,36 +62,3 @@ def hls_select(img, thresh=(0, 255)):
     binary_output = np.zeros_like(s_channel)
     binary_output[(s_channel > thresh[0]) & (s_channel <= thresh[1])] = 1
     return binary_output
-
-def get_source_points(image):
-	h = image.shape[0]
-	w = image.shape[1]
-
-	sx1 = int(np.round(w / 2.15))
-	sx2 = w - sx1
-	sx4 = w // 7
-	sx3 = w - sx4
-	sy1 = sy2 = int(np.round(h / 1.6))
-	sy3 = sy4 = h
-
-	dx1 = dx4 = int(np.round(w / 4))
-	dx2 = dx3 = w - dx1
-	dy1 = dy2 = 0
-	dy3 = dy4 = h
-
-	src_points = np.float32([[sx1, sy1],[sx2, sy2], [sx3, sy3], [sx4, sy4]])
-	dst_points = np.float32([[dx1, dy1], [dx2, dy2], [dx3, dy3], [dx4, dy4]])
-
-	return src_points, dst_points
-
-def get_transform_matrices(image):
-	src_points, dst_points = get_source_points(image)
-	transform_matrix = cv2.getPerspectiveTransform(src_points, dst_points)
-	transform_matrix_inverse = cv2.getPerspectiveTransform(dst_points, src_points)
-	return transform_matrix, transform_matrix_inverse
-
-def transform_perspective(image, transform_matrix):
-	# can't be as method for using to different object
-	img_size = (image.shape[1], image.shape[0])
-	warped = cv2.warpPerspective(image, transform_matrix, img_size, flags=cv2.INTER_LINEAR)
-	return warped
