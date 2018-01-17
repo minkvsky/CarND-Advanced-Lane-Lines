@@ -1,12 +1,14 @@
 import numpy as np
 import cv2
 import glob
+# import cPickle as pickle
 import pickle
 import os
 
 # camera class
 from image_process import *
 class camera():
+	# only init is used
 	def __init__(self):
 		self.img_path = glob.glob('camera_cal/calibration*.jpg') # given a set of chessborad images
 		self.img_pattern=(9, 6)
@@ -19,7 +21,14 @@ class camera():
 		self.imgpoints = [] # 2D
 		self.mtx = None # calibration matrix
 		self.dist = None # distortion coefficients
+		self.check = False
 		# necessary to output?
+		if os.path.exists("calibration.p"):
+		    calibration_data = pickle.load(open( "calibration.p", "rb" ))
+		    self.mtx, self.dist = calibration_data['mtx'], calibration_data['dist']
+		    self.check = True
+		else:
+		    self.update_mtx_and_dist()
 
 	def update_points(self):
 		images = [cv2.imread(image) for image in self.img_path]
@@ -36,13 +45,19 @@ class camera():
 
 
 	def update_mtx_and_dist(self):
+		if self.check:
+			return None
 		objpoints, imgpoints = self.update_points()
 		ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, self.img_size, None, None)
 		self.mtx = mtx
 		self.dist = dist
+		calibration_data = {'mtx':mtx,'dist':dist}
+		pickle.dump(calibration_data, open( "calibration.p", "wb" ) )
+		self.check = True
 		return mtx, dist
 
 class img_camera(camera):
+	# update_M_and_Minv and combined_thresh are main
 	def __init__(self, img):
 		camera.__init__(self)
 		self.img = img
@@ -57,7 +72,9 @@ class img_camera(camera):
 		self.binary_top_down_image = None
 	# need to modify
 	def update_src_and_dst(self):
-		# only relate to img.shape
+		# only relate to img.shape,is this ok?
+		# or make it hard
+		# will be tuned
 		h, w = self.img.shape[0], self.img.shape[1]
 
 		sx1 = int(np.round(w / 2.15))
@@ -81,17 +98,15 @@ class img_camera(camera):
 
 	def update_M_and_Minv(self):
 		src_points, dst_points = self.update_src_and_dst()
-		transform_matrix = cv2.getPerspectiveTransform(src_points, dst_points)
-		transform_matrix_inverse = cv2.getPerspectiveTransform(dst_points, src_points)
-		self.M = transform_matrix
-		self.Minv = transform_matrix_inverse
-		return transform_matrix, transform_matrix_inverse
+		self.M = cv2.getPerspectiveTransform(src_points, dst_points)
+		self.Minv = cv2.getPerspectiveTransform(dst_points, src_points)
+		return self.M, self.Minv
 
-	def transform_perspective(self, transform_matrix):
-		# transform_matrix can be one of M and Minv
+	def transform_perspective(self):
 		img_size = self.img.shape[1], self.img.shape[0]
-		self.combined_thresh()
-		warped = cv2.warpPerspective(self.combined_threshold_img, transform_matrix, img_size, flags=cv2.INTER_LINEAR)
+		if not self.combined_threshold_img:	
+			self.combined_thresh()
+		warped = cv2.warpPerspective(self.combined_threshold_img, self.M, img_size, flags=cv2.INTER_LINEAR)
 		self.binary_top_down_image = warped
 		return warped
 
@@ -109,7 +124,7 @@ class img_camera(camera):
 		grady = abs_sobel_thresh(img, orient='y', sobel_kernel=ksize, thresh=(10, 100))
 		mag_binary = mag_thresh(img, sobel_kernel=ksize, thresh=(15, 150))
 		dir_binary = dir_threshold(img, sobel_kernel=ksize, thresh=(0.8, 1.3))
-		color_binary = hls_select(img, thresh=(170, 255))
+		color_binary = hls_select(img, thresh=(230, 255))
 
 		combined = np.zeros_like(img[:,:,0])
 		combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) & color_binary == 1] = 1

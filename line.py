@@ -1,10 +1,12 @@
 # Define a class to receive the characteristics of each line detection
 from camera import *
+from PIL import Image
+import time
 
 class Line(img_camera):
-    def __init__(self, img):
+    def __init__(self, img, auto=False):
         img_camera.__init__(self, img)
-
+        self.result = None
         self.left_fit = None
         self.right_fit = None
         # out put img from find line
@@ -12,8 +14,12 @@ class Line(img_camera):
         # where should they update
         self.left_fitx = None
         self.right_fitx = None
+
         self.leftx_base = None
         self.rightx_base = None
+        self.midpoint = None
+        self.lane_line_width = None
+
         self.ploty = None
 
         self.leftx = None
@@ -21,9 +27,13 @@ class Line(img_camera):
         self.rightx = None
         self.righty = None
 
-        # curvature
+        # maybe need to correct
+        self.ym_per_pix = 30/720 # meters per pixel in y dimension
+        self.xm_per_pix = 3.7/700 # meters per pixel in x dimension
+        # curvature and vehicle postion in meters
         self.left_curverad = None
         self.right_curverad = None
+        self.dist_from_center_in_meters = None
 
         # was the line detected in the last iteration?
         self.detected = False  
@@ -47,6 +57,17 @@ class Line(img_camera):
         self.ally = None
 
         # status process
+        # auto update step by step
+        # pipeline
+        if not self.result and auto:
+            self.update_M_and_Minv()
+            self.transform_perspective()
+            self.find_lines(figname=True)
+            self.curvature()
+            self.distance_from_center()
+            self.display()
+            if self.dist_from_center_in_meters >= 0.4:
+                self.unusual_save()
         
 
     def update_base_points(self):
@@ -55,7 +76,7 @@ class Line(img_camera):
         # Take a histogram of the bottom half of the image
         histogram = np.sum(binary_warped[int(binary_warped.shape[0]/2):,:], axis=0)
         # Create an output image to draw on and  visualize the result
-        out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        # out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
         # Find the peak of the left and right halves of the histogram
         # These will be the starting point for the left and right lines
         midpoint = np.int(histogram.shape[0]/2)
@@ -63,14 +84,18 @@ class Line(img_camera):
         rightx_base = np.argmax(histogram[midpoint:]) + midpoint
         self.leftx_base = leftx_base
         self.rightx_base = rightx_base
+        self.midpoint = midpoint
+        
 
         return leftx_base, rightx_base
 
-    def find_lines(self, figname=True):
+    def find_lines(self, figname=False):
+        # need to be optimized
         binary_warped = self.binary_top_down_image
         self.update_base_points()
-        leftx_base = self.leftx_base
-        rightx_base = self.rightx_base
+        # Current positions to be updated for each window
+        leftx_current = self.leftx_base
+        rightx_current = self.rightx_base
         # Choose the number of sliding windows
         nwindows = 9
         # Set height of windows
@@ -81,9 +106,7 @@ class Line(img_camera):
         nonzerox = np.array(nonzero[1])
 
         out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
-        # Current positions to be updated for each window
-        leftx_current = leftx_base
-        rightx_current = rightx_base
+        
         # Set the width of the windows +/- margin
         margin = 100
         # Set minimum number of pixels found to recenter window
@@ -126,34 +149,37 @@ class Line(img_camera):
         rightx = nonzerox[right_lane_inds]
         righty = nonzeroy[right_lane_inds] 
 
-        # self.leftx = leftx
-        # self.lefty = lefty
-        # self.rightx = rightx
-        # self.righty = righty
 
         # Fit a second order polynomial to each
         left_fit = np.polyfit(lefty, leftx, 2)
         right_fit = np.polyfit(righty, rightx, 2)
 
+        # Generate x and y values for plotting
+        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+        # self.left_fitx = left_fitx
+        # self.right_fitx = right_fitx
+        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0] # red
+        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255] # blue
+
         if figname:
-            # Generate x and y values for plotting
-            ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
-            left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-            right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-            # self.left_fitx = left_fitx
-            # self.right_fitx = right_fitx
-            out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-            out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-            self.out_img = out_img
             plt.imshow(out_img)
             plt.plot(left_fitx, ploty, color='yellow')
             plt.plot(right_fitx, ploty, color='yellow')
             plt.xlim(0, 1280)
             plt.ylim(720, 0)
         
-
-        # self.left_fit = left_fit
-        # self.right_fit = right_fit
+        self.out_img = out_img
+        self.ploty = ploty
+        self.leftx = leftx
+        self.lefty = lefty
+        self.rightx = rightx
+        self.righty = righty
+        self.left_fitx = left_fitx
+        self.right_fitx = right_fitx
+        self.left_fit = left_fit
+        self.right_fit = right_fit
 
         return left_fit, right_fit
 
@@ -162,6 +188,7 @@ class Line(img_camera):
 
     def find_lines_skip_slidewindows(self):
         # not be used
+        # may be aborted
         binary_warped = self.binary_top_down_image
         left_fit = self.left_fit
         right_fit = self.right_fit
@@ -226,42 +253,28 @@ class Line(img_camera):
         return left_fitx, right_fitx
 
     def curvature(self, meters=True):
-
-        self.update_param()
+        # default in meters or in pixel
         ploty = self.ploty
         left_fit = self.left_fit
         right_fit = self.right_fit
 
-        # not same as above
-        # leftx = self.leftx
-        # lefty = self.lefty
-        # rightx = self.rightx
-        # righty = self.righty
-
-
         # Define y-value where we want radius of curvature
         # I'll choose the maximum y-value, corresponding to the bottom of the image
         y_eval = np.max(ploty)
-
+        # this computation is right?
         if meters:
             # Define conversions in x and y from pixels space to meters
-            ym_per_pix = 30/720 # meters per pixel in y dimension
-            xm_per_pix = 3.7/700 # meters per pixel in x dimension
+            ym_per_pix = self.ym_per_pix # meters per pixel in y dimension
+            xm_per_pix = self.xm_per_pix # meters per pixel in x dimension
 
-            quadratic_coeff = 3e-4 # arbitrary quadratic coefficient
-            # For each y position generate random x position within +/-50 pix
-            # of the line base position in each case (x=200 for left, and x=900 for right)
-            leftx = np.array([200 + (y**2)*quadratic_coeff + np.random.randint(-50, high=51) 
-                                          for y in ploty])
-            rightx = np.array([900 + (y**2)*quadratic_coeff + np.random.randint(-50, high=51) 
-                                            for y in ploty])
-
-            leftx = leftx[::-1]  # Reverse to match top-to-bottom in y
-            rightx = rightx[::-1]  # Reverse to match top-to-bottom in y
+            leftx = self.leftx
+            lefty = self.lefty
+            rightx = self.rightx
+            righty = self.righty
 
             # Fit new polynomials to x,y in world space
-            left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
-            right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
+            left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+            right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
             # Calculate the new radii of curvature
             left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
             right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
@@ -279,48 +292,24 @@ class Line(img_camera):
         return left_curverad, right_curverad
 
     def distance_from_center(self):
-        return 
+        lane_center = (self.leftx_base + self.rightx_base) / 2
+        image_center = self.img.shape[1] / 2
+        dist_from_center_in_pixels = abs(image_center - lane_center)
+        dist_from_center_in_meters = dist_from_center_in_pixels * self.xm_per_pix
+        self.dist_from_center_in_meters = dist_from_center_in_meters
+        self.lane_line_width = (self.rightx_base - self.leftx_base) * self.xm_per_pix
+        return dist_from_center_in_meters
 
-
-    def update_param(self):
-        # Generate some fake data to represent lane-line pixels
-        binary_warped = self.binary_top_down_image
-        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
-            
-        quadratic_coeff = 3e-4 # arbitrary quadratic coefficient
-        # For each y position generate random x position within +/-50 pix
-        # of the line base position in each case (x=200 for left, and x=900 for right)
-        leftx = np.array([200 + (y**2)*quadratic_coeff + np.random.randint(-50, high=51) 
-                                      for y in ploty])
-        rightx = np.array([900 + (y**2)*quadratic_coeff + np.random.randint(-50, high=51) 
-                                        for y in ploty])
-
-        leftx = leftx[::-1]  # Reverse to match top-to-bottom in y
-        rightx = rightx[::-1]  # Reverse to match top-to-bottom in y
-
-        # Fit a second order polynomial to pixel positions in each fake lane line
-        left_fit = np.polyfit(ploty, leftx, 2)
-        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-        right_fit = np.polyfit(ploty, rightx, 2)
-        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-
-        self.ploty = ploty
-        self.leftx = leftx
-        self.rightx = rightx
-        self.left_fitx = left_fitx
-        self.right_fitx = right_fitx
-        self.left_fit = left_fit
-        self.right_fit = right_fit
 
     def display(self):
 
-        self.curvature(meters=False)
         warped = self.binary_top_down_image
         ploty = self.ploty
         left_fitx = self.left_fitx
         right_fitx = self.right_fitx
         Minv = self.Minv
         img = self.img
+        self.distance_from_center()
         # Create an image to draw the lines on
         warp_zero = np.zeros_like(warped).astype(np.uint8)
         color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
@@ -337,37 +326,24 @@ class Line(img_camera):
         newwarp = cv2.warpPerspective(color_warp, Minv, (warped.shape[1], warped.shape[0])) 
         # Combine the result with the original image
         result = cv2.addWeighted(img, 1, newwarp, 0.3, 0)
+        text_dist = 'Distance from lane center: {:.3f}m'.format(self.dist_from_center_in_meters)
+        text_curvature = 'Radius of curvature: Left {:.3f}m, Right {:3f}m'.format(self.left_curverad, self.right_curverad)
+        text_lane_width = 'Width of lane line: {}m'.format(self.lane_line_width)
+        cv2.putText(result, text_lane_width, (30, 170), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
+        cv2.putText(result, text_dist, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
+        cv2.putText(result, text_curvature, (30, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
         self.result = result
         # plt.imshow(result)
         return(result)
 
-    def pipline(self):
-        # maybe in class in line
-        # Undistort the image
-        img = self.undistort()
+    def unusual_save(self):
+        start = time.time()
+        img_name = '-'.join([str(x) for x in time.localtime(start)[:5]])
+        im = Image.fromarray(self.img)
+        if not os.path.exists('unusual_images'):
+            os.mkdir('unusual_images')                
+        im.save("unusual_images/unusual_{}.jpg".format(img_name))
+        if not os.path.exists('unusual_lines'):
+            os.mkdir('unusual_lines')
+        pickle.dump(self, open("unusual_images/line_{}.p".format(img_name), "wb" ) )       
 
-        # Preprocess the image with colour and gradient thresholding
-        binary_image = self.combined_threshold()
-
-        # Calculate our transform matrix and its inverse
-        self.update_M_and_Minv()
-        # Transform the image into a top down view for analysis
-        binary_top_down_image = transform_perspective(binary_image, self.M)
-
-        left_fit, right_fit = self.find_lines(binary_top_down_image)
-
-        # todo
-
-        # Now that the analysis has produced the best polynomial fits 
-        # for the left and right lane lines, we generate an overlay to
-        # show our results
-        top_down_lane_overlay = self.generate_top_down_lane_overlay(image, left_fit, right_fit)
-
-        # Transform the top down overlay to the same perspective as the original image
-        lane_overlay = transform_perspective(top_down_lane_overlay, self.Minv)
-
-        # Combine the overlay with the original image
-        output = cv2.addWeighted(image, 1.0, lane_overlay, 0.3, 0)
-
-        # Calculate the distance from the center
-        output = self.imshow(output)
