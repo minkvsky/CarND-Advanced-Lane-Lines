@@ -4,6 +4,7 @@ import glob
 # import cPickle as pickle
 import pickle
 import os
+import time
 
 # camera class
 from image_process import *
@@ -61,6 +62,7 @@ class img_camera(camera):
 	def __init__(self, img):
 		camera.__init__(self)
 		self.img = img
+		self.img_name = '-'.join([str(x) for x in time.localtime(time.time())[:5]])
 
 		# only relate to img.shape so consistent for a video
 		self.src = None

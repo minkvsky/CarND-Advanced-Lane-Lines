@@ -62,3 +62,9 @@ def hls_select(img, thresh=(0, 255)):
     binary_output = np.zeros_like(s_channel)
     binary_output[(s_channel > thresh[0]) & (s_channel <= thresh[1])] = 1
     return binary_output
+
+def equalize_histogram_color(image):
+    yuv = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
+    yuv[:, :, 0] = cv2.equalizeHist(yuv[:, :, 0])
+    output = cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB)
+    return output

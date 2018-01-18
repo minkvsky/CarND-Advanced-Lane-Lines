@@ -2,6 +2,8 @@
 from camera import *
 from PIL import Image
 import time
+class wantError (Exception):  
+    pass  
 
 class Line(img_camera):
     def __init__(self, img, auto=False):
@@ -30,7 +32,6 @@ class Line(img_camera):
         self.righty = None
 
 
-
         # maybe need to correct
         self.ym_per_pix = 30/720 # meters per pixel in y dimension
         self.xm_per_pix = 3.7/700 # meters per pixel in x dimension
@@ -52,11 +53,13 @@ class Line(img_camera):
             self.curvature()
             self.distance_from_center()
             self.display()
+            self.save_line_fit()
             if self.dist_from_center_in_meters >= 0.4:
                 self.unusual_save()
         
 
     def update_base_points(self):
+        # return Ture or False update
         binary_warped = self.binary_top_down_image
         # Assuming you have created a warped binary image called "binary_warped"
         # Take a histogram of the bottom half of the image
@@ -66,23 +69,41 @@ class Line(img_camera):
         # Find the peak of the left and right halves of the histogram
         # These will be the starting point for the left and right lines
         midpoint = np.int(histogram.shape[0]/2)
-        leftx_base = np.argmax(histogram[:midpoint])
-        rightx_base = np.argmax(histogram[midpoint:]) + midpoint
-        self.leftx_base = leftx_base
-        self.rightx_base = rightx_base
-        self.midpoint = midpoint
-        
 
-        return leftx_base, rightx_base
+
+        if self.leftx_base :
+            try:
+                leftx_base = np.argmax(histogram[min(max(self.leftx_base - 100, 200), 500): midpoint])
+                rightx_base = np.argmax(histogram[midpoint: max(min(self.rightx_base + 100, 1080), 780)]) + midpoint
+            except:
+                print(self.leftx_base)
+                self.unusual_save()
+                raise wantError()
+        else:
+            leftx_base = np.argmax(histogram[: midpoint])
+            rightx_base = np.argmax(histogram[midpoint:]) + midpoint
+        self.midpoint = midpoint
+
+        
+        if self.leftx_base is None:
+            self.leftx_base = leftx_base
+            self.rightx_base = rightx_base
+            return True
+        elif abs(self.leftx_base - leftx_base) > 80 and abs(self.rightx_base - rightx_base) > 80:
+            self.leftx_base = leftx_base
+            self.rightx_base = rightx_base
+            return True
+        else:
+            return False
 
     def find_lines(self, figname=False):
         # need to be optimized
         binary_warped = self.binary_top_down_image
-        self.update_base_points()
+        update = self.update_base_points()
         
-        if os.path.exists('line_fit.p'):
+        if os.path.exists('line_fit.p') and not update:
             left_fit, right_fit = self.update_line_fit()
-        else:    
+        else:
             left_fit, right_fit = self.generate_line_fit_with_windows()
 
         self.generate_out_img(figname)
@@ -118,6 +139,8 @@ class Line(img_camera):
         self.ploty = ploty
         self.left_fitx = left_fitx
         self.right_fitx = right_fitx
+        # self.leftx_base = int(left_fitx[-1])
+        # self.rightx_base = int(right_fitx[-1])
 
         return out_img
 
@@ -126,6 +149,8 @@ class Line(img_camera):
         binary_warped = self.binary_top_down_image
         leftx_current = self.leftx_base
         rightx_current = self.rightx_base
+        out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        self.out_img = out_img
 
         nonzero = binary_warped.nonzero()
         nonzeroy = np.array(nonzero[0])
@@ -246,12 +271,12 @@ class Line(img_camera):
             left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
             right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
             # Now our radius of curvature is in meters
-            print(left_curverad, 'm', right_curverad, 'm')
+            # print(left_curverad, 'm', right_curverad, 'm')
             # Example values: 632.1 m    626.2 m
         else:
             left_curverad = ((1 + (2*left_fit[0]*y_eval + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
             right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
-            print(left_curverad, right_curverad)
+            # print(left_curverad, right_curverad)
         # Example values: 1926.74 1908.48
         self.left_curverad = left_curverad
         self.right_curverad = right_curverad
@@ -259,12 +284,12 @@ class Line(img_camera):
         return left_curverad, right_curverad
 
     def distance_from_center(self):
-        lane_center = (self.leftx_base + self.rightx_base) / 2
+        lane_center = (self.left_fitx[-1] + self.right_fitx[-1]) / 2
         image_center = self.img.shape[1] / 2
         dist_from_center_in_pixels = abs(image_center - lane_center)
         dist_from_center_in_meters = dist_from_center_in_pixels * self.xm_per_pix
         self.dist_from_center_in_meters = dist_from_center_in_meters
-        self.lane_line_width = (self.rightx_base - self.leftx_base) * self.xm_per_pix
+        self.lane_line_width = (self.right_fitx[-1] - self.left_fitx[-1]) * self.xm_per_pix
         return dist_from_center_in_meters
 
 
@@ -294,7 +319,7 @@ class Line(img_camera):
         # Combine the result with the original image
         result = cv2.addWeighted(img, 1, newwarp, 0.3, 0)
         text_dist = 'Distance from lane center: {:.3f}m'.format(self.dist_from_center_in_meters)
-        text_curvature = 'Radius of curvature: Left {:.3f}m, Right {:3f}m'.format(self.left_curverad, self.right_curverad)
+        text_curvature = 'Radius of curvature: Left {:.3f}m, Right {:.3f}m'.format(self.left_curverad, self.right_curverad)
         text_lane_width = 'Width of lane line: {:.3f}m'.format(self.lane_line_width)
         cv2.putText(result, text_lane_width, (30, 170), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
         cv2.putText(result, text_dist, (30, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
@@ -304,8 +329,7 @@ class Line(img_camera):
         return(result)
 
     def unusual_save(self):
-        start = time.time()
-        img_name = '-'.join([str(x) for x in time.localtime(start)[:5]])
+        img_name = self.img_name
         im = Image.fromarray(self.img)
         if not os.path.exists('unusual_images'):
             os.mkdir('unusual_images')                
@@ -316,11 +340,16 @@ class Line(img_camera):
 
 
     def save_line_fit(self):
-        line_fit = {'left': self.left_fit, 'right': self.right_fit}
+        line_fit = {'left': self.left_fit, 'right': self.right_fit, 'leftx_base': self.leftx_base, 'rightx_base': self.rightx_base}
         pickle.dump(line_fit, open('line_fit.p', 'wb'))
+
+        with open('track_records.csv', 'a') as f:
+            f.write('{}, {}, {}, {}, {}, {}, {}\n'.format(self.left_curverad, self.right_curverad, self.dist_from_center_in_meters, self.lane_line_width, self.img_name, self.leftx_base, self.rightx_base))
 
     def load_line_fit(self):
         line_fit = pickle.load(open('line_fit.p', 'rb'))
         self.left_fit = line_fit['left']
         self.right_fit = line_fit['right']
+        self.leftx_base = line_fit['leftx_base']
+        self.rightx_base = line_fit['rightx_base']
 
