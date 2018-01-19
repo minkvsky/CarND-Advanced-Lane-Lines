@@ -2,6 +2,7 @@
 from camera import *
 from PIL import Image
 import time
+import numpy as np
 class wantError (Exception):  
     pass  
 
@@ -40,8 +41,11 @@ class Line(img_camera):
         self.right_curverad = None
         self.dist_from_center_in_meters = None
 
+        
         if self.left_fit is None and os.path.exists('line_fit.p'):
-            self.load_line_fit()
+            new_enough = abs(os.stat('line_fit.p').st_atime - time.time()) < 2
+            if new_enough:
+                self.load_line_fit()
 
         # status process
         # auto update step by step
@@ -70,18 +74,8 @@ class Line(img_camera):
         # These will be the starting point for the left and right lines
         midpoint = np.int(histogram.shape[0]/2)
 
-
-        if self.leftx_base :
-            try:
-                leftx_base = np.argmax(histogram[min(max(self.leftx_base - 100, 200), 500): midpoint])
-                rightx_base = np.argmax(histogram[midpoint: max(min(self.rightx_base + 100, 1080), 780)]) + midpoint
-            except:
-                print(self.leftx_base)
-                self.unusual_save()
-                raise wantError()
-        else:
-            leftx_base = np.argmax(histogram[: midpoint])
-            rightx_base = np.argmax(histogram[midpoint:]) + midpoint
+        leftx_base = np.argmax(histogram[: midpoint])
+        rightx_base = np.argmax(histogram[midpoint:]) + midpoint
         self.midpoint = midpoint
 
         
@@ -89,7 +83,7 @@ class Line(img_camera):
             self.leftx_base = leftx_base
             self.rightx_base = rightx_base
             return True
-        elif abs(self.leftx_base - leftx_base) > 80 and abs(self.rightx_base - rightx_base) > 80:
+        elif abs(self.leftx_base - leftx_base) > 50 and abs(self.rightx_base - rightx_base) > 50:
             self.leftx_base = leftx_base
             self.rightx_base = rightx_base
             return True
@@ -101,7 +95,8 @@ class Line(img_camera):
         binary_warped = self.binary_top_down_image
         update = self.update_base_points()
         
-        if os.path.exists('line_fit.p') and not update:
+        rnd = np.random.randint(0,5)
+        if os.path.exists('line_fit.p') and not update and rnd > 0:
             left_fit, right_fit = self.update_line_fit()
         else:
             left_fit, right_fit = self.generate_line_fit_with_windows()
@@ -145,6 +140,7 @@ class Line(img_camera):
         return out_img
 
     def generate_line_fit_with_windows(self, nwindows = 9, margin = 100, minpix = 50):
+        # np.where maybe can be used to simplify 
             
         binary_warped = self.binary_top_down_image
         leftx_current = self.leftx_base

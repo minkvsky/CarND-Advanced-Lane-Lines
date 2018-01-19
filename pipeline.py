@@ -13,6 +13,9 @@ import matplotlib.image as mpimage
 if os.path.exists('line_fit.p'):
 	os.remove('line_fit.p')
 
+if not os.path.exists('unusual_images'):
+	os.mkdir('unusual_images')
+
 if os.path.exists('track_records.csv'):
 	os.remove('track_records.csv')
 	with open('track_records.csv', 'a') as f:
@@ -24,8 +27,9 @@ def pipeline(img):
 	except Exception as e:
 		print (str(e))
 		img_name = '-'.join([str(x) for x in time.localtime(time.time())[:5]])
+		im = Image.fromarray(img)
 		im.save("unusual_images/error_{}.jpg".format(img_name))
-		# raise
+		raise
 	return(l.result)
 input_video = 'project_video.mp4'
 # clip = VideoFileClip(input_video).subclip(0,1)

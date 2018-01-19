@@ -5,6 +5,7 @@ import glob
 import pickle
 import os
 import time
+import math
 
 # camera class
 from image_process import *
@@ -78,22 +79,23 @@ class img_camera(camera):
 		# only relate to img.shape,is this ok?
 		# or make it hard
 		# will be tuned
+		# here we can use hough line detection
+		# todo
+		# offset = [50, 0]
+		# corners = np.float32([[253, 697], [585, 456], [700, 456], [1061, 690]])
+		# src_points = np.float32([corners[0], corners[1], corners[2], corners[3]])
+		# dst_points = np.float32([corners[0] + offset, corners[1] + offset, corners[2] - offset, corners[3] - offset])
 		h, w = self.img.shape[0], self.img.shape[1]
 
-		sx1 = int(np.round(w / 2.15))
-		sx2 = w - sx1
-		sx4 = w // 7
-		sx3 = w - sx4
-		sy1 = sy2 = int(np.round(h / 1.6))
-		sy3 = sy4 = h
-
-		dx1 = dx4 = int(np.round(w / 4))
-		dx2 = dx3 = w - dx1
-		dy1 = dy2 = 0
-		dy3 = dy4 = h
-
-		src_points = np.float32([[sx1, sy1],[sx2, sy2], [sx3, sy3], [sx4, sy4]])
-		dst_points = np.float32([[dx1, dy1], [dx2, dy2], [dx3, dy3], [dx4, dy4]])
+		src_points = np.float32([
+								[math.ceil(w/2.15), math.ceil(h/1.6)],[w - math.ceil(w/2.15), math.ceil(h/1.6)], 
+								[w - w//7, h], [w//7, h]
+								])
+		dst_points = np.float32([
+								[math.ceil(w/4), 0], [w - math.ceil(w/4), 0], 
+								[math.ceil(w/4), h], [w - math.ceil(w/4), h]
+								])
+		
 		self.src = src_points
 		self.dst = dst_points
 
@@ -110,7 +112,7 @@ class img_camera(camera):
 		if self.combined_threshold_img is None:	
 			self.combined_thresh()
 		warped = cv2.warpPerspective(self.combined_threshold_img, self.M, img_size, flags=cv2.INTER_LINEAR)
-		self.binary_top_down_image = warped
+		self.binary_top_down_image = region_of_interest(warped)
 		return warped
 
 	def undistort(self):
@@ -130,9 +132,13 @@ class img_camera(camera):
 		mag_binary = mag_thresh(img, sobel_kernel=ksize, thresh=(15, 150))
 		dir_binary = dir_threshold(img, sobel_kernel=ksize, thresh=(0.8, 1.3))
 		color_binary = hls_select(img, thresh=(230, 255))
+		equalize_color_binary = equalize_histogram_color_select(img, thresh=(250, 255))
+
+		land = lambda *x: np.logical_and.reduce(x)
+		lor = lambda * x: np.logical_or.reduce(x)
 
 		combined = np.zeros_like(img[:,:,0])
-		combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) & color_binary == 1] = 1
+		combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | (color_binary == 1) & (equalize_color_binary == 1)] = 1
 
 		self.combined_threshold_img = combined
 		return combined
