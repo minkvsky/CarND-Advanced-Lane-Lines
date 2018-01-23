@@ -88,14 +88,14 @@ class img_camera(camera):
 		h, w = self.img.shape[0], self.img.shape[1]
 
 		src_points = np.float32([
-								[math.ceil(w/2.15), math.ceil(h/1.6)],[w - math.ceil(w/2.15), math.ceil(h/1.6)], 
+								[int(w/2.15), int(h/1.5)],[w - int(w/2.15), int(h/1.5)],
 								[w - w//7, h], [w//7, h]
 								])
 		dst_points = np.float32([
-								[math.ceil(w/4), 0], [w - math.ceil(w/4), 0], 
-								[math.ceil(w/4), h], [w - math.ceil(w/4), h]
+								[int(w/4), 0], [w - int(w/4), 0],
+								[w - int(w/4), h], [int(w/4), h]
 								])
-		
+
 		self.src = src_points
 		self.dst = dst_points
 
@@ -109,10 +109,10 @@ class img_camera(camera):
 
 	def transform_perspective(self):
 		img_size = self.img.shape[1], self.img.shape[0]
-		if self.combined_threshold_img is None:	
+		if self.combined_threshold_img is None:
 			self.combined_thresh()
 		warped = cv2.warpPerspective(self.combined_threshold_img, self.M, img_size, flags=cv2.INTER_LINEAR)
-		self.binary_top_down_image = region_of_interest(warped)
+		self.binary_top_down_image = warped
 		return warped
 
 	def undistort(self):
@@ -124,25 +124,21 @@ class img_camera(camera):
 	def combined_thresh(self):
 		self.undistort()
 		img = self.undist
+		# land = lambda *x: np.logical_and.reduce(x)
+		# lor = lambda * x: np.logical_or.reduce(x)
 		# Choose a Sobel kernel size
 		ksize = 3
 		# Apply each of the thresholding functions
 		gradx = abs_sobel_thresh(img, orient='x', sobel_kernel=ksize, thresh=(10, 100))
 		grady = abs_sobel_thresh(img, orient='y', sobel_kernel=ksize, thresh=(10, 100))
 		mag_binary = mag_thresh(img, sobel_kernel=ksize, thresh=(15, 150))
-		dir_binary = dir_threshold(img, sobel_kernel=ksize, thresh=(0.8, 1.3))
-		color_binary = hls_select(img, thresh=(230, 255))
+		dir_binary = dir_threshold(img, sobel_kernel=ksize, thresh=(1.0, 1.3))
+		color_binary = hls_select(img, thresh=(100, 255))
 		equalize_color_binary = equalize_histogram_color_select(img, thresh=(250, 255))
-
-		land = lambda *x: np.logical_and.reduce(x)
-		lor = lambda * x: np.logical_or.reduce(x)
+		luv_color = luv_select(img, thresh=(225, 255))
 
 		combined = np.zeros_like(img[:,:,0])
-		combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | (color_binary == 1) & (equalize_color_binary == 1)] = 1
-
+		combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | ((color_binary == 1) & (equalize_color_binary == 1)) | (luv_color==1)] = 1
+		# combined = region_of_interest(combined)
 		self.combined_threshold_img = combined
 		return combined
-
-
-	
-

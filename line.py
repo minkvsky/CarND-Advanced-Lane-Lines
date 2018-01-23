@@ -3,11 +3,12 @@ from camera import *
 from PIL import Image
 import time
 import numpy as np
+import pandas as pd
 class wantError (Exception):  
     pass  
 
 class Line(img_camera):
-    def __init__(self, img, auto=False):
+    def __init__(self, img, auto=False, load_line=False):
         img_camera.__init__(self, img)
         self.result = None
         self.left_fit = None
@@ -47,6 +48,9 @@ class Line(img_camera):
             if new_enough:
                 self.load_line_fit()
 
+        if load_line:
+            self.load_line_fit()
+
         # status process
         # auto update step by step
         # pipeline
@@ -56,6 +60,13 @@ class Line(img_camera):
             self.find_lines()
             self.curvature()
             self.distance_from_center()
+            if self.sanity_check():
+                self.unusual_save(filename='sanity')
+                left_fit, right_fit = self.update_line_fit()
+                self.generate_out_img(figname=False)
+                self.curvature()
+                self.distance_from_center()
+
             self.display()
             self.save_line_fit()
             if self.dist_from_center_in_meters >= 0.4:
@@ -97,7 +108,11 @@ class Line(img_camera):
         
         rnd = np.random.randint(0,5)
         if os.path.exists('line_fit.p') and not update and rnd > 0:
-            left_fit, right_fit = self.update_line_fit()
+            try:
+                left_fit, right_fit = self.update_line_fit()
+            except:
+                left_fit, right_fit = self.generate_line_fit_with_windows()
+
         else:
             left_fit, right_fit = self.generate_line_fit_with_windows()
 
@@ -119,7 +134,10 @@ class Line(img_camera):
         nonzero = binary_warped.nonzero()
         nonzeroy = np.array(nonzero[0])
         nonzerox = np.array(nonzero[1])
-        out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        if self.out_img is None:
+            out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        else:
+            out_img = self.out_img
         out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0] # red
         out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255] # blue
 
@@ -146,7 +164,7 @@ class Line(img_camera):
         leftx_current = self.leftx_base
         rightx_current = self.rightx_base
         out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
-        self.out_img = out_img
+        
 
         nonzero = binary_warped.nonzero()
         nonzeroy = np.array(nonzero[0])
@@ -194,6 +212,8 @@ class Line(img_camera):
         left_fit = np.polyfit(lefty, leftx, 2)
         right_fit = np.polyfit(righty, rightx, 2)
 
+
+        self.out_img = out_img
         self.left_fit = left_fit
         self.right_fit = right_fit
         self.left_lane_inds = left_lane_inds
@@ -324,15 +344,25 @@ class Line(img_camera):
         # plt.imshow(result)
         return(result)
 
-    def unusual_save(self):
+    def sanity_check(self):
+        df = pd.read_csv('track_records.csv')
+        if  len(df) > 10:
+            left_check = df['left_curverad'].iloc[-1] > 2 * df['left_curverad'][-10:].mean() 
+            right_check =  df['right_curverad'].iloc[-1] > 2 * df['right_curverad'][-10:].mean()
+            center_check = df['dist_from_center_in_meters'].iloc[-1] > 2 * df['dist_from_center_in_meters'][-10:].mean()
+            return(left_check | right_check | center_check)
+        else:
+            return(False)
+
+    def unusual_save(self, filename='unusual'):
         img_name = self.img_name
         im = Image.fromarray(self.img)
-        if not os.path.exists('unusual_images'):
-            os.mkdir('unusual_images')                
-        im.save("unusual_images/unusual_{}.jpg".format(img_name))
-        if not os.path.exists('unusual_lines'):
-            os.mkdir('unusual_lines')
-        pickle.dump(self, open("unusual_images/line_{}.p".format(img_name), "wb" ) )
+        if not os.path.exists(filename + '_images'):
+            os.mkdir(filename + '_images')                
+        im.save(filename + "_images/unusual_{}.jpg".format(img_name))
+        if not os.path.exists(filename + '_lines'):
+            os.mkdir(filename + '_lines')
+        pickle.dump(self, open(filename + "_images/line_{}.p".format(img_name), "wb" ) )
 
 
     def save_line_fit(self):

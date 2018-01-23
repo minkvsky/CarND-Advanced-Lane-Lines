@@ -63,6 +63,26 @@ def hls_select(img, thresh=(0, 255)):
     binary_output[(s_channel > thresh[0]) & (s_channel <= thresh[1])] = 1
     return binary_output
 
+def rgb_select(img, thresh=(0, 255)):
+    g_channel = img[:, :, 1]
+    binary_output = np.zeros_like(g_channel)
+    binary_output[(g_channel > thresh[0]) & (g_channel <= thresh[1])] = 1
+    return(binary_output)
+
+def luv_select(img, thresh=(0, 255)):
+    luv = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
+    l_channel = img[:, :, 0]
+    binary_output = np.zeros_like(l_channel)
+    binary_output[(l_channel > thresh[0]) & (l_channel <= thresh[1])] = 1
+    return(binary_output)
+
+def lab_select(img, thresh=(0, 255)):
+    lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+    b_channel = img[:, :, 2]
+    binary_output = np.zeros_like(b_channel)
+    binary_output[(b_channel > thresh[0]) & (b_channel <= thresh[1])] = 1
+    return(binary_output)
+
 def equalize_histogram_color(img):
     yuv = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
     yuv[:, :, 0] = cv2.equalizeHist(yuv[:, :, 0])
@@ -75,7 +95,7 @@ def equalize_histogram_color_select(img, thresh=(0, 255)):
     output = cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB)
     return hls_select(output)
 
-def region_of_interest(img, vertices=np.array([[(200, 720),(200, 0), (1080, 0), (1080, 720)]], dtype=np.int32)):
+def region_of_interest(img, vertices=np.array([[(200, 720),(200, 500), (1080, 500), (1080, 720)]], dtype=np.int32)):
     """
     Applies an image mask.
     

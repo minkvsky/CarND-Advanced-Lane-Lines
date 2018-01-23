@@ -19,7 +19,7 @@ if not os.path.exists('unusual_images'):
 if os.path.exists('track_records.csv'):
 	os.remove('track_records.csv')
 	with open('track_records.csv', 'a') as f:
-		f.write('{}, {}, {}, {}, {}, {}, {}\n'.format('left_curverad', 'right_curverad', 'dist_from_center_in_meters', 'lane_line_width', 'img_name', 'leftx_base', 'rightx_base'))
+		f.write('{},{},{},{},{},{},{}\n'.format('left_curverad', 'right_curverad', 'dist_from_center_in_meters', 'lane_line_width', 'img_name', 'leftx_base', 'rightx_base'))
 
 def pipeline(img):
 	try:
@@ -32,6 +32,7 @@ def pipeline(img):
 		raise
 	return(l.result)
 input_video = 'project_video.mp4'
+# input_video = 'challenge_video.mp4'
 # clip = VideoFileClip(input_video).subclip(0,1)
 clip = VideoFileClip(input_video)
 output_clip = clip.fl_image(pipeline)
