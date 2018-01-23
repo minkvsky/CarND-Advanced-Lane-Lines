@@ -18,7 +18,8 @@ if not os.path.exists('unusual_images'):
 
 if os.path.exists('track_records.csv'):
 	os.remove('track_records.csv')
-	with open('track_records.csv', 'a') as f:
+
+with open('track_records.csv', 'w') as f:
 		f.write('{},{},{},{},{},{},{}\n'.format('left_curverad', 'right_curverad', 'dist_from_center_in_meters', 'lane_line_width', 'img_name', 'leftx_base', 'rightx_base'))
 
 def pipeline(img):
