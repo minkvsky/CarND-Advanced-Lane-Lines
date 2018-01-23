@@ -36,7 +36,7 @@ class Line(img_camera):
 
         # maybe need to correct
         self.ym_per_pix = 30/720 # meters per pixel in y dimension
-        self.xm_per_pix = 3.7/700 # meters per pixel in x dimension
+        self.xm_per_pix = 3.7/635 # meters per pixel in x dimension
         # curvature and vehicle postion in meters
         self.left_curverad = None
         self.right_curverad = None
@@ -115,7 +115,10 @@ class Line(img_camera):
                 left_fit, right_fit = self.generate_line_fit_with_windows()
 
         else:
-            left_fit, right_fit = self.generate_line_fit_with_windows()
+            try:
+                left_fit, right_fit = self.generate_line_fit_with_windows()
+            except:
+                left_fit, right_fit = self.update_line_fit()
 
         self.generate_out_img(figname)
 
@@ -314,7 +317,7 @@ class Line(img_camera):
     def distance_from_center(self):
         lane_center = (self.left_fitx[-1] + self.right_fitx[-1]) / 2
         image_center = self.img.shape[1] / 2
-        dist_from_center_in_pixels = abs(image_center - lane_center)
+        dist_from_center_in_pixels = image_center - lane_center
         dist_from_center_in_meters = dist_from_center_in_pixels * self.xm_per_pix
         self.dist_from_center_in_meters = dist_from_center_in_meters
         self.lane_line_width = (self.right_fitx[-1] - self.left_fitx[-1]) * self.xm_per_pix

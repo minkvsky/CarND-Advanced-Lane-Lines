@@ -141,7 +141,7 @@ class img_camera(camera):
 		combined = np.zeros_like(img[:,:,0])
 		# combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | (luv_color==1)] = 1
 		# combined[(luv_color==1)] = 1
-		combined[((gradx == 1) & (grady == 1)) & ((mag_binary == 1)) | ((color_binary == 1 ) & (equalize_color_binary == 1) & (luv_color==1))| (luv_color==1)] = 1
+		combined[((gradx == 1) & (grady == 1)) & ((mag_binary == 1)) | ((color_binary == 1 ) & (equalize_color_binary == 1) & (lab_color==1))| (luv_color==1)] = 1
 		# combined = region_of_interest(combined)
 		self.combined_threshold_img = combined
 		return combined
