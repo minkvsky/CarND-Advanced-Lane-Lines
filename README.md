@@ -106,7 +106,7 @@ an example of combined threshold image as follow:
 
 ```
 src_points = np.float32([
-                        [int(w/2.15), int(h/1.5)],[w - int(w/2.15), int(h/1.5)],
+                        [int(w/2.15), int(h/1.6)],[w - int(w/2.15), int(h/1.6)],
                         [w - w//7, h], [w//7, h]
                         ])
 dst_points = np.float32([
