@@ -131,14 +131,17 @@ class img_camera(camera):
 		# Apply each of the thresholding functions
 		gradx = abs_sobel_thresh(img, orient='x', sobel_kernel=ksize, thresh=(10, 100))
 		grady = abs_sobel_thresh(img, orient='y', sobel_kernel=ksize, thresh=(10, 100))
-		mag_binary = mag_thresh(img, sobel_kernel=ksize, thresh=(15, 150))
+		mag_binary = mag_thresh(img, sobel_kernel=ksize, thresh=(30, 100))
 		dir_binary = dir_threshold(img, sobel_kernel=ksize, thresh=(1.0, 1.3))
 		color_binary = hls_select(img, thresh=(100, 255))
 		equalize_color_binary = equalize_histogram_color_select(img, thresh=(250, 255))
 		luv_color = luv_select(img, thresh=(225, 255))
+		lab_color = lab_select(img, thresh=(150, 200))
 
 		combined = np.zeros_like(img[:,:,0])
-		combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | ((color_binary == 1) & (equalize_color_binary == 1)) | (luv_color==1)] = 1
+		# combined[((gradx == 1) & (grady == 1) & (dir_binary == 1)) | (luv_color==1)] = 1
+		# combined[(luv_color==1)] = 1
+		combined[((gradx == 1) & (grady == 1)) & ((mag_binary == 1)) | ((color_binary == 1 ) & (equalize_color_binary == 1) & (luv_color==1))| (luv_color==1)] = 1
 		# combined = region_of_interest(combined)
 		self.combined_threshold_img = combined
 		return combined

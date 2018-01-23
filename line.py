@@ -43,7 +43,8 @@ class Line(img_camera):
         self.dist_from_center_in_meters = None
 
         
-        if self.left_fit is None and os.path.exists('line_fit.p'):
+        # if self.left_fit is None and os.path.exists('line_fit.p'):
+        if os.path.exists('line_fit.p'):
             new_enough = abs(os.stat('line_fit.p').st_atime - time.time()) < 2
             if new_enough:
                 self.load_line_fit()
@@ -131,6 +132,7 @@ class Line(img_camera):
         left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
         right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
+
         nonzero = binary_warped.nonzero()
         nonzeroy = np.array(nonzero[0])
         nonzerox = np.array(nonzero[1])
@@ -150,10 +152,20 @@ class Line(img_camera):
         
         self.out_img = out_img
         self.ploty = ploty
-        self.left_fitx = left_fitx
-        self.right_fitx = right_fitx
+        # sanity check
+        if self.left_fitx is not None:
+            if abs(left_fitx[-1] - self.left_fitx[-1])  > 40 or abs(right_fitx[-1] - self.right_fitx[-1]) > 40:
+                self.load_line_fit()
+            else:
+                self.left_fitx = left_fitx
+                self.right_fitx = right_fitx
+        else:
+            self.left_fitx = left_fitx
+            self.right_fitx = right_fitx
         # self.leftx_base = int(left_fitx[-1])
         # self.rightx_base = int(right_fitx[-1])
+        # sanity check
+        
 
         return out_img
 
@@ -366,16 +378,31 @@ class Line(img_camera):
 
 
     def save_line_fit(self):
-        line_fit = {'left': self.left_fit, 'right': self.right_fit, 'leftx_base': self.leftx_base, 'rightx_base': self.rightx_base}
-        pickle.dump(line_fit, open('line_fit.p', 'wb'))
+        # line_fit = {'left': self.left_fit, 'right': self.right_fit, 
+        # 'leftx_base': self.leftx_base, 
+        # 'rightx_base': self.rightx_base,
+        # 'left_fitx': self.left_fitx,
+        # 'right_fitx': self.right_fitx}
+        pickle.dump(self, open('line_fit.p', 'wb'))
 
         with open('track_records.csv', 'a') as f:
             f.write('{}, {}, {}, {}, {}, {}, {}\n'.format(self.left_curverad, self.right_curverad, self.dist_from_center_in_meters, self.lane_line_width, self.img_name, self.leftx_base, self.rightx_base))
 
     def load_line_fit(self):
-        line_fit = pickle.load(open('line_fit.p', 'rb'))
-        self.left_fit = line_fit['left']
-        self.right_fit = line_fit['right']
-        self.leftx_base = line_fit['leftx_base']
-        self.rightx_base = line_fit['rightx_base']
-
+        l = pickle.load(open('line_fit.p', 'rb'))
+        # self.left_fit = line_fit['left']
+        # self.right_fit = line_fit['right']
+        # self.leftx_base = line_fit['leftx_base']
+        # self.rightx_base = line_fit['rightx_base']
+        # self.left_fitx = line_fit['left_fitx']
+        # self.right_fitx = line_fit['right_fitx']
+        self.left_fit = l.left_fit
+        self.right_fit = l.right_fit
+        self.leftx_base = l.leftx_base
+        self.rightx_base = l.rightx_base
+        self.left_fitx = l.left_fitx
+        self.right_fitx = l.right_fitx
+        self.leftx = l.leftx
+        self.lefty = l.lefty
+        self.rightx = l.rightx
+        self.righty = l.righty

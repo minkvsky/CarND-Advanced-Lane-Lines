@@ -25,6 +25,7 @@ with open('track_records.csv', 'w') as f:
 def pipeline(img):
 	try:
 		l = Line(img, auto=True)
+		
 	except Exception as e:
 		print (str(e))
 		img_name = '-'.join([str(x) for x in time.localtime(time.time())[:5]])
@@ -34,7 +35,7 @@ def pipeline(img):
 	return(l.result)
 input_video = 'project_video.mp4'
 # input_video = 'challenge_video.mp4'
-# clip = VideoFileClip(input_video).subclip(0,1)
+# clip = VideoFileClip(input_video).subclip(39,43)
 clip = VideoFileClip(input_video)
 output_clip = clip.fl_image(pipeline)
 output_clip.write_videofile('output_' + input_video, audio=False)
